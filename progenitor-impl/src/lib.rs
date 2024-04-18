@@ -195,9 +195,7 @@ impl GenerationSettings {
 impl Default for Generator {
     fn default() -> Self {
         Self {
-            type_space: TypeSpace::new(
-                TypeSpaceSettings::default().with_type_mod("types"),
-            ),
+            type_space: TypeSpace::new(&TypeSpaceSettings::default()),
             settings: Default::default(),
             uses_futures: Default::default(),
             uses_websockets: Default::default(),
@@ -210,7 +208,6 @@ impl Generator {
     pub fn new(settings: &GenerationSettings) -> Self {
         let mut type_settings = TypeSpaceSettings::default();
         type_settings
-            .with_type_mod("types")
             .with_struct_builder(settings.interface == InterfaceStyle::Builder);
         settings.extra_derives.iter().for_each(|derive| {
             let _ = type_settings.with_derive(derive.clone());
@@ -309,6 +306,7 @@ impl Generator {
         let maybe_inner = self.settings.inner_type.as_ref().map(|inner| {
             quote! {
                 /// Return a reference to the inner type stored in `self`.
+                #[flutter_rust_bridge::frb(ignore)]
                 pub fn inner(&self) -> &#inner {
                     &self.inner
                 }
@@ -354,6 +352,9 @@ impl Generator {
         // generated file is not at the top level of the crate.
 
         let file = quote! {
+            // This may be used by some impl Deserialize, but not all.
+            #[allow(unused_imports)]
+            use std::convert::TryFrom;
             // Re-export ResponseValue and Error since those are used by the
             // public interface of Client.
             #[allow(unused_imports)]
@@ -362,33 +363,27 @@ impl Generator {
             use progenitor_client::{encode_path, RequestBuilderExt};
             #[allow(unused_imports)]
             use reqwest::header::{HeaderMap, HeaderValue};
+            use serde::{Deserialize, Serialize};
 
             /// Types used as operation parameters and responses.
-            #[allow(clippy::all)]
-            pub mod types {
-                use serde::{Deserialize, Serialize};
-
-                // This may be used by some impl Deserialize, but not all.
-                #[allow(unused_imports)]
-                use std::convert::TryFrom;
-
-                #types
-            }
+            #types
 
             #[derive(Clone, Debug)]
+            #[flutter_rust_bridge::frb(opaque)]
             #[doc = #client_docstring]
-            pub struct Client {
+            struct ApiClient {
                 pub(crate) baseurl: String,
                 pub(crate) client: reqwest::Client,
                 #inner_property
             }
 
-            impl Client {
+            impl ApiClient {
                 /// Create a new client.
                 ///
                 /// `baseurl` is the base URL provided to the internal
                 /// `reqwest::Client`, and should include a scheme and hostname,
                 /// as well as port and a path stem if applicable.
+                #[flutter_rust_bridge::frb(ignore)]
                 pub fn new(
                     baseurl: &str,
                     #inner_parameter
@@ -413,6 +408,7 @@ impl Generator {
                 /// `baseurl` is the base URL provided to the internal
                 /// `reqwest::Client`, and should include a scheme and hostname,
                 /// as well as port and a path stem if applicable.
+                #[flutter_rust_bridge::frb(ignore)]
                 pub fn new_with_client(
                     baseurl: &str,
                     client: reqwest::Client,
@@ -426,11 +422,13 @@ impl Generator {
                 }
 
                 /// Get the base URL to which requests are made.
+                #[flutter_rust_bridge::frb(ignore)]
                 pub fn baseurl(&self) -> &String {
                     &self.baseurl
                 }
 
                 /// Get the internal `reqwest::Client` used to make requests.
+                #[flutter_rust_bridge::frb(ignore)]
                 pub fn client(&self) -> &reqwest::Client {
                     &self.client
                 }
@@ -439,6 +437,7 @@ impl Generator {
                 ///
                 /// This string is pulled directly from the source OpenAPI
                 /// document and may be in any format the API selects.
+                #[flutter_rust_bridge::frb(ignore)]
                 pub fn api_version(&self) -> &'static str {
                     #version_str
                 }
@@ -466,14 +465,8 @@ impl Generator {
 
         let out = quote! {
             #[allow(clippy::all)]
-            impl Client {
+            impl ApiClient {
                 #(#methods)*
-            }
-
-            /// Items consumers will typically use such as the Client.
-            pub mod prelude {
-                #[allow(unused_imports)]
-                pub use super::Client;
             }
         };
         Ok(out)
@@ -494,7 +487,7 @@ impl Generator {
             .collect::<Vec<_>>();
 
         let out = quote! {
-            impl Client {
+            impl ApiClient {
                 #(#builder_methods)*
             }
 
@@ -515,11 +508,6 @@ impl Generator {
 
                 #(#builder_struct)*
             }
-
-            /// Items consumers will typically use such as the Client.
-            pub mod prelude {
-                pub use self::super::Client;
-            }
         };
 
         Ok(out)
@@ -535,7 +523,7 @@ impl Generator {
             .map(|method| self.builder_struct(method, TagStyle::Separate))
             .collect::<Result<Vec<_>>>()?;
 
-        let (traits_and_impls, trait_preludes) =
+        let (traits_and_impls, _trait_preludes) =
             self.builder_tags(input_methods, &tag_info);
 
         // The allow(unused_imports) on the `pub use` is necessary with Rust 1.76+, in case the
@@ -560,14 +548,6 @@ impl Generator {
                 };
 
                 #(#builder_struct)*
-            }
-
-            /// Items consumers will typically use such as the Client and
-            /// extension traits.
-            pub mod prelude {
-                #[allow(unused_imports)]
-                pub use super::Client;
-                #trait_preludes
             }
         };
 

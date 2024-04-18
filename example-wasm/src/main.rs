@@ -7,7 +7,7 @@ fn main() {
     let client = Client::new("https://foo/bar");
     let _ = client.enrol(
         "auth-token",
-        &types::EnrolBody {
+        &EnrolBody {
             host: "".to_string(),
             key: "".to_string(),
         },

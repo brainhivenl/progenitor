@@ -662,6 +662,7 @@ impl Generator {
 
         let method_impl = quote! {
             #[doc = #doc_comment]
+            #[flutter_rust_bridge::frb(ignore)]
             pub async fn #operation_id #bounds (
                 &'a self,
                 #(#params),*
@@ -1973,6 +1974,7 @@ impl Generator {
         let doc = format!("{}```ignore\n{}\n```", make_doc_comment(method), eg);
 
         let sig = quote! {
+            #[flutter_rust_bridge::frb(ignore)]
             fn #operation_id(&self) -> builder:: #struct_ident
         };
 
